@@ -196,7 +196,7 @@ Do the arithmetic before picking an acceleration. One hourly trace row lasts
 
 So dropping to 30–60× shrinks the lag by roughly 5–10× but does **not**
 eliminate it — the advertised value is still at least a full trace row
-behind, and CISO alone swings 147 → 287 g between midday and evening, so a
+behind, and CISO alone swings 136 → 259 g between midday and evening, so a
 two-hour-stale ranking can still be the wrong ranking. Bounding the lag to
 about one row needs `ACCEL < 3600/S`, i.e. under ~20× at the staleness we
 measure.
