@@ -120,7 +120,7 @@ arithmetic cannot be faked.
 
 | Quantity | Status | Source |
 |---|---|---|
-| Carbon intensity | **real (derived)** | EIA hourly generation mix per balancing authority × published emission factors, replayed at demo speed. Verified against grid character: PACE (coal) highest at 598 g mean, CISO lowest at 228 with the real solar dip (147 midday vs 287 evening). Derived, not a measured CO₂ value — the sidecar and dashboard say so |
+| Carbon intensity | **real (derived)** | EIA hourly generation mix per balancing authority × published emission factors, replayed at demo speed. Verified against grid character: in the shipped trace (`config/traces/eia.csv`, 2026-08-27 → 09-02, 151 h) PACE (coal) is highest at 543.5 g mean and CISO lowest at 214.6 g, with the real solar dip visible (136 g local midday vs 259 g evening). Derived, not a measured CO₂ value — the sidecar and dashboard say so |
 | Node power | **measured** | NVML board power, sampled in-guest by the workload (FABRIC GPUs are PCI passthrough, so the card's own sensor is readable). Measured live: Quadro RTX 6000 ≈12 W idle, Tesla T4 ≈9 W idle. No assumed-power mode exists |
 | Migration cost | **measured** | real dataplane transfers, real downtime, calibrated on the testbed |
 | Inter-site link state | **measured** | FABRIC public metrics API (`dataplaneIn/OutBits`) |
