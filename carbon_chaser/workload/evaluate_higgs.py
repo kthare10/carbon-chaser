@@ -69,9 +69,12 @@ def main():
 
     result = {
         "dataset": "UCI HIGGS (11M simulated events, 21 low-level features)",
+        # Carries the DOI so a result read out of a shared directory can be
+        # traced to the published benchmark without guessing which paper.
+        # NB doi is ncomms5308 for article 4308 — ncomms4308 is unrelated.
         "reference": ("Baldi, Sadowski & Whiteson, Nature Communications "
-                      "5:4308 (2014) — deep nets reach AUC ~0.88 on "
-                      "low-level features alone"),
+                      "5:4308 (2014), doi:10.1038/ncomms5308 — deep nets "
+                      "reach AUC ~0.88 on low-level features alone"),
         "trained_steps": int(state["step"]),
         "val_events": int(len(y_val)),
         "val_auc": round(float(auc), 4),

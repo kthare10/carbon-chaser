@@ -4,7 +4,9 @@
 The dataset is the UCI HIGGS benchmark (11M simulated ATLAS-like collision
 events, 28 features) from Baldi, Sadowski & Whiteson, "Searching for exotic
 particles in high-energy physics with deep learning", Nature Communications
-5:4308 (2014). The task is real: separate Higgs-producing signal processes
+5:4308 (2014), doi:10.1038/ncomms5308, arXiv:1402.4735. The dataset itself is
+Whiteson, HIGGS, UCI Machine Learning Repository, doi:10.24432/C5V312.
+The task is real: separate Higgs-producing signal processes
 from the background that mimics them. The published contribution of that
 paper was precisely that deep networks beat shallow ones on the *raw* 21
 kinematic features, without the 7 hand-engineered high-level features — so

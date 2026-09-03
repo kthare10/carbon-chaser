@@ -23,6 +23,15 @@ There are two implementations in this repo:
 
 ## The demo: a carbon-aware Pegasus workflow
 
+The workload is real science, not a benchmark loop: signal-vs-background
+classification on the **UCI HIGGS** dataset — 11M simulated ATLAS-like
+collision events, 28 features (21 low-level kinematic quantities plus 7
+hand-engineered high-level ones). Training uses the 21 low-level features
+only, which is the regime where the published result showed deep networks
+beating shallow ones, so architecture and training genuinely matter. Both the
+dataset and that result are cited under [Citation](#citation); the target to
+beat is **AUC ≈ 0.88**.
+
 Training runs as a chain of time-boxed segments linked by their checkpoints
 (`train_000 → ckpt_001.pt → train_001 → …`), so every segment is a fresh
 HTCondor matchmaking decision. Workers advertise their grid's live carbon
@@ -283,6 +292,53 @@ stating explicitly in a paper rather than leaving as a confound.
 > segments while color changes mark carbon-driven migrations. The demo
 > highlights how FABRIC's programmable, geographically distributed
 > infrastructure enables sustainability-aware systems research.
+
+## Citation
+
+The science workload is not ours — it is a published high-energy-physics
+benchmark. Cite the paper for the result, and the UCI record for the data.
+
+**Paper.** P. Baldi, P. Sadowski and D. Whiteson, "Searching for exotic
+particles in high-energy physics with deep learning," *Nature
+Communications* **5**, 4308 (2014).
+doi:[10.1038/ncomms5308](https://doi.org/10.1038/ncomms5308) ·
+arXiv:[1402.4735](https://arxiv.org/abs/1402.4735) [hep-ph]
+
+**Dataset.** D. Whiteson, *HIGGS* [Dataset], UCI Machine Learning
+Repository (2014).
+doi:[10.24432/C5V312](https://doi.org/10.24432/C5V312) ·
+[archive.ics.uci.edu/dataset/280/higgs](https://archive.ics.uci.edu/dataset/280/higgs)
+
+> Note the DOI: Nature Communications article **4308** carries DOI
+> `ncomms5308`. `10.1038/ncomms4308` is a *different* paper (Boczkowska
+> et al., on Arp2/3 complex activation) — an easy and citable-looking
+> mistake, so it is spelled out here.
+
+```bibtex
+@article{baldi2014searching,
+  title   = {Searching for exotic particles in high-energy physics with deep learning},
+  author  = {Baldi, Pierre and Sadowski, Peter and Whiteson, Daniel},
+  journal = {Nature Communications},
+  volume  = {5},
+  pages   = {4308},
+  year    = {2014},
+  doi     = {10.1038/ncomms5308},
+  eprint  = {1402.4735},
+  archivePrefix = {arXiv},
+  primaryClass  = {hep-ph}
+}
+
+@misc{whiteson2014higgs,
+  title     = {{HIGGS}},
+  author    = {Whiteson, Daniel},
+  year      = {2014},
+  howpublished = {UCI Machine Learning Repository},
+  doi       = {10.24432/C5V312}
+}
+```
+
+The published AUC on the 21 low-level features is ≈0.88; this demo reports
+its own measured AUC per run so the two can be compared directly.
 
 ## Layout
 

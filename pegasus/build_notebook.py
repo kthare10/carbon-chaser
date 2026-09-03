@@ -38,7 +38,7 @@ the carbon arithmetic measured rather than assumed.
 |---|---|
 | Grid carbon intensity | EIA hourly generation mix × published emission factors, per balancing authority |
 | Node power | NVML board power, read in-guest (FABRIC GPUs are PCI passthrough) |
-| Science | UCI **HIGGS** — 11M simulated collision events; Baldi, Sadowski & Whiteson, *Nature Communications* 5:4308 (2014) |
+| Science | UCI **HIGGS** — 11M simulated collision events ([doi:10.24432/C5V312](https://doi.org/10.24432/C5V312)); Baldi, Sadowski & Whiteson, *Nature Communications* **5**, 4308 (2014), [doi:10.1038/ncomms5308](https://doi.org/10.1038/ncomms5308) |
 
 **There is no simulator in this stack.** With no carbon feed the run refuses
 to start; with no NVML reading, energy accounting for that site pauses rather
