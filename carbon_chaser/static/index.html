@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carbon Chaser — FABRIC</title>
+<style>
+  /* Dark booth theme (deliberate single mode); tokens from the reference palette. */
+  :root {
+    color-scheme: dark;
+    --page:        #0d0d0d;
+    --surface:     #1a1a19;
+    --ink:         #ffffff;
+    --ink-2:       #c3c2b7;
+    --muted:       #898781;
+    --grid:        #2c2c2a;
+    --baseline:    #383835;
+    --border:      rgba(255,255,255,0.10);
+    --good:        #0ca30c;
+    --warning:     #fab219;
+    /* categorical slots (dark-surface steps), fixed site order */
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70;
+    --s4: #c98500; --s5: #d55181; --s6: #008300;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--page); color: var(--ink);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 16px 20px;
+  }
+  header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 14px; flex-wrap: wrap; }
+  header h1 { font-size: 20px; font-weight: 650; }
+  header .sub { color: var(--ink-2); }
+  .badge {
+    font-size: 12px; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--ink-2);
+  }
+  .badge.migrating { color: var(--warning); border-color: var(--warning); animation: pulse 1s infinite; }
+  .badge.stalled { color: var(--warning); border-color: var(--warning); }
+  .badge.down { color: #d03b3b; border-color: #d03b3b; font-weight: 650; }
+  #healthbar {
+    display: none; margin-bottom: 12px; padding: 8px 12px; border-radius: 8px;
+    font-size: 13px; border: 1px solid var(--warning); color: var(--warning);
+  }
+  #healthbar.down { border-color: #d03b3b; color: #d03b3b; }
+  @keyframes pulse { 50% { opacity: .45; } }
+  .clock { margin-left: auto; color: var(--muted); font-size: 13px; }
+
+  .grid { display: grid; grid-template-columns: minmax(420px, 3fr) minmax(360px, 2fr); gap: 14px; }
+  @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .panel h2 { font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 8px; }
+
+  /* map */
+  #map { width: 100%; height: auto; display: block; }
+  .map-legend { display: flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--muted); font-size: 12px; }
+  .map-legend .swatch { width: 22px; height: 10px; border-radius: 2px; border: 1px solid var(--border); }
+
+  /* tiles */
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .tile .label { font-size: 12px; color: var(--muted); }
+  .tile .value { font-size: 30px; font-weight: 650; margin: 2px 0; }
+  .tile .value.good { color: var(--good); }
+  .tile .note { font-size: 12px; color: var(--ink-2); }
+  .tile svg { display: block; margin-top: 6px; }
+
+  /* line chart */
+  #chartwrap { position: relative; }
+  #tooltip {
+    position: absolute; pointer-events: none; display: none;
+    background: var(--page); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; font-size: 12px; z-index: 5; min-width: 150px;
+  }
+  #tooltip .row { display: flex; align-items: center; gap: 6px; justify-content: space-between; }
+  #tooltip .chip, .legend .chip { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+  #tooltip .val { font-variant-numeric: tabular-nums; color: var(--ink); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; color: var(--ink-2); }
+  .legend .item { display: flex; align-items: center; gap: 6px; }
+
+  /* site table (also the accessible table view + booth controls) */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; padding: 4px 6px; border-bottom: 1px solid var(--baseline); }
+  td { padding: 6px; border-bottom: 1px solid var(--grid); color: var(--ink-2); }
+  td.num { font-variant-numeric: tabular-nums; color: var(--ink); }
+  tr.active td { color: var(--ink); font-weight: 600; }
+  button {
+    background: none; border: 1px solid var(--border); color: var(--ink-2);
+    border-radius: 6px; padding: 3px 9px; font-size: 12px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--ink-2); color: var(--ink); }
+  button:disabled { opacity: .35; cursor: default; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🌱 Carbon Chaser</h1>
+  <span class="sub">carbon-aware workload migration on FABRIC</span>
+  <span class="badge" id="status">connecting…</span>
+  <span class="clock" id="clock"></span>
+</header>
+
+<div id="healthbar"></div>
+
+<div class="grid">
+  <div class="panel">
+    <h2>Where the job is running <span style="color:var(--muted);font-weight:400">— marker fill = grid carbon intensity now</span></h2>
+    <svg id="map" role="img" aria-label="US map of FABRIC sites colored by carbon intensity"></svg>
+    <div class="map-legend">
+      <span>cleaner</span>
+      <span class="swatch" style="background:#b7d3f6"></span>
+      <span class="swatch" style="background:#6da7ec"></span>
+      <span class="swatch" style="background:#3987e5"></span>
+      <span class="swatch" style="background:#256abf"></span>
+      <span class="swatch" style="background:#184f95"></span>
+      <span>dirtier (gCO₂/kWh)</span>
+      <span style="margin-left:auto">▶ = job &nbsp; dashed/faded = stale, not measured</span>
+    </div>
+  </div>
+
+  <div>
+    <div class="tiles">
+      <div class="panel tile">
+        <div class="label">CO₂ saved vs never moving</div>
+        <div class="value good" id="saved">—</div>
+        <div class="note" id="saved-note"></div>
+        <div class="note" id="carbon-source" style="margin-top:4px"></div>
+        <div class="note" id="power-source"></div>
+        <svg id="spark-saved" width="100%" height="34"></svg>
+      </div>
+      <div class="panel tile">
+        <div class="label">Training progress</div>
+        <div class="value" id="steps">—</div>
+        <div class="note" id="train-note"></div>
+        <svg id="spark-loss" width="100%" height="34"></svg>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Sites — live intensity &amp; booth controls</h2>
+      <table id="sitetable" aria-label="Site carbon intensity table">
+        <thead><tr><th></th><th>Site</th><th>Grid zone</th>
+          <th style="text-align:right">gCO₂/kWh</th>
+          <th>path from job</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <div id="netnote" style="margin-top:6px;font-size:12px;color:var(--warning)"></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel" style="margin-top:14px">
+  <h2>Carbon intensity over time <span style="color:var(--muted);font-weight:400">(gCO₂/kWh · dashed marks = migrations)</span></h2>
+  <div id="chartwrap">
+    <svg id="chart" width="100%" height="240"></svg>
+    <div id="tooltip"></div>
+  </div>
+  <div class="legend" id="legend"></div>
+</div>
+
+<script src="/static/us-map.js"></script>
+<script>
+const SITE_ORDER = ["CLEM", "TACC", "UTAH", "STAR", "UCSD", "NEWY"];
+const SITE_COLOR = {};
+["--s1","--s2","--s3","--s4","--s5","--s6"].forEach((v, i) => {
+  SITE_COLOR[SITE_ORDER[i]] =
+    getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+});
+// sequential blue ramp bins for intensity (ordinal steps 150..600 for dark surface)
+const BINS = [[250,"#b7d3f6"],[350,"#6da7ec"],[450,"#3987e5"],[550,"#256abf"],[Infinity,"#184f95"]];
+const binColor = v => BINS.find(([t]) => v < t)[1];
+
+const svgNS = "http://www.w3.org/2000/svg";
+function el(name, attrs, parent, text) {
+  const e = document.createElementNS(svgNS, name);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const fmtT = h => `${String(Math.floor(h)).padStart(2,"0")}:${String(Math.floor((h%1)*60)).padStart(2,"0")}`;
+const fmtG = g => g >= 1000 ? (g/1000).toFixed(2) + " kg" : Math.round(g) + " g";
+
+// ---- map ----
+const map = document.getElementById("map");
+map.setAttribute("viewBox", US_MAP.viewBox);
+const [,, MW, MH] = US_MAP.viewBox.split(" ").map(Number);
+const proj = (lon, lat) => [
+  (lon - US_MAP.lon0) / (US_MAP.lon1 - US_MAP.lon0) * MW,
+  (US_MAP.lat1 - lat) / (US_MAP.lat1 - US_MAP.lat0) * MH,
+];
+el("path", { d: US_MAP.path, fill: "none", stroke: "var(--baseline)",
+             "stroke-width": 1, "vector-effect": "non-scaling-stroke" }, map);
+const arcLayer = el("g", {}, map);
+const siteLayer = el("g", {}, map);
+let lastMigCount = 0;
+
+function drawMap(st) {
+  siteLayer.replaceChildren();
+  for (const [name, s] of Object.entries(st.sites)) {
+    const [x, y] = proj(s.lon, s.lat);
+    const g = el("g", {}, siteLayer);
+    const isActive = name === st.active_site;
+    if (isActive) {
+      const ring = el("circle", { cx: x, cy: y, r: 16, fill: "none",
+        stroke: "var(--ink)", "stroke-width": 1.5, opacity: .9 }, g);
+      el("animate", { attributeName: "r", values: "13;20;13", dur: "2s",
+        repeatCount: "indefinite" }, ring);
+      el("animate", { attributeName: "opacity", values: ".9;.15;.9", dur: "2s",
+        repeatCount: "indefinite" }, ring);
+    }
+    // A null reading must never be painted as a value. Rendering it as 0
+    // put the lightest ("cleanest") colour on a site we know nothing about.
+    // Three states, three appearances. A stale value still has a number,
+    // so keying only on "has a value" rendered it exactly like a fresh
+    // measurement.
+    const known = s.intensity !== null && s.intensity !== undefined;
+    const stale = known && s.data === "stale";
+    el("circle", { cx: x, cy: y, r: s.managed ? 9 : 6,
+      fill: !s.managed ? "var(--grid)"
+            : known ? binColor(s.intensity) : "none",
+      "fill-opacity": stale ? 0.35 : 1,
+      stroke: !known ? "var(--muted)"
+              : stale ? "var(--warning)" : "var(--surface)",
+      "stroke-width": 2,
+      "stroke-dasharray": known && !stale ? "none" : "3 2" }, g);
+    el("text", { x: x + 13, y: y - 4, fill: "var(--ink)",
+      "font-size": 13, "font-weight": s.managed ? 650 : 400 }, g,
+      (isActive ? "▶ " : "") + name);
+    el("text", { x: x + 13, y: y + 10,
+      fill: known && !stale ? "var(--muted)" : "var(--warning)",
+      "font-size": 11 }, g,
+      !known ? "no data"
+             : stale ? Math.round(s.intensity) + " g · stale"
+                     : Math.round(s.intensity) + " g");
+  }
+}
+
+function drawMigrationArc(st) {
+  if (st.migrations.length <= lastMigCount) return;
+  const m = st.migrations[st.migrations.length - 1];
+  lastMigCount = st.migrations.length;
+  const a = proj(st.sites[m.from].lon, st.sites[m.from].lat);
+  const b = proj(st.sites[m.to].lon, st.sites[m.to].lat);
+  const mx = (a[0]+b[0])/2, my = Math.min(a[1], b[1]) - 60;
+  const p = el("path", { d: `M${a[0]} ${a[1]} Q${mx} ${my} ${b[0]} ${b[1]}`,
+    fill: "none", stroke: "var(--ink)", "stroke-width": 2,
+    "stroke-dasharray": "6 5", opacity: .9 }, arcLayer);
+  el("animate", { attributeName: "opacity", from: .9, to: 0, dur: "12s",
+    fill: "freeze" }, p);
+  setTimeout(() => p.remove(), 12500);
+}
+
+// ---- line chart ----
+const chart = document.getElementById("chart");
+const wrap = document.getElementById("chartwrap");
+const tooltip = document.getElementById("tooltip");
+let lastHistory = [];
+
+function drawChart(st) {
+  const hist = st.history;
+  lastHistory = hist;
+  chart.replaceChildren();
+  if (hist.length < 2) return;
+  const W = chart.clientWidth || 900, H = 240;
+  chart.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const P = { l: 42, r: 12, t: 10, b: 40 };  // b leaves room for the ribbon
+  const t0 = hist[0].sim_t, t1 = hist[hist.length-1].sim_t;
+  let vmax = 100;
+  for (const h of hist) for (const v of Object.values(h.intensities)) vmax = Math.max(vmax, v);
+  vmax = Math.ceil(vmax / 100) * 100;
+  const X = t => P.l + (t - t0) / Math.max(1, t1 - t0) * (W - P.l - P.r);
+  const Y = v => H - P.b - v / vmax * (H - P.t - P.b);
+
+  for (let v = 0; v <= vmax; v += vmax / 4) {
+    el("line", { x1: P.l, x2: W - P.r, y1: Y(v), y2: Y(v),
+      stroke: v === 0 ? "var(--baseline)" : "var(--grid)", "stroke-width": 1 }, chart);
+    el("text", { x: P.l - 6, y: Y(v) + 4, "text-anchor": "end",
+      fill: "var(--muted)", "font-size": 11 }, chart, Math.round(v));
+  }
+  const hourTicks = 5;
+  for (let i = 0; i <= hourTicks; i++) {
+    const t = t0 + (t1 - t0) * i / hourTicks;
+    const h = hist[Math.min(hist.length-1, Math.round((hist.length-1) * i / hourTicks))].hour;
+    el("text", { x: X(t), y: H - 6, "text-anchor": "middle",
+      fill: "var(--muted)", "font-size": 11 }, chart, fmtT(h));
+  }
+  for (const m of st.migrations) {
+    if (m.sim_t < t0) continue;
+    el("line", { x1: X(m.sim_t), x2: X(m.sim_t), y1: P.t, y2: H - P.b,
+      stroke: "var(--muted)", "stroke-dasharray": "3 4", "stroke-width": 1 }, chart);
+  }
+  for (const site of SITE_ORDER) {
+    if (!(site in st.sites)) continue;
+    // Gaps are gaps: a missing sample breaks the line rather than being
+    // interpolated through (or emitting NaN into the path).
+    // Classify EDGES, not points. Building per-point runs meant a single
+    // stale sample emitted a lone `M` — a moveto with no line, which draws
+    // nothing — so brief or alternating staleness was completely invisible
+    // while the solid line's sub-pixel gaps still read as continuous.
+    // An edge is "measured" only if BOTH endpoints were measured.
+    const pts = [];
+    for (const h of hist) {
+      const v = h.intensities ? h.intensities[site] : undefined;
+      pts.push((v === undefined || v === null) ? null : {
+        x: X(h.sim_t), y: Y(v),
+        stale: (h.stale || []).includes(site),
+      });
+    }
+    let solid = "", dashed = "";
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      if (!a || !b) continue;                    // real gap: draw nothing
+      const seg = `M${a.x.toFixed(1)} ${a.y.toFixed(1)}`
+                + `L${b.x.toFixed(1)} ${b.y.toFixed(1)}`;
+      if (a.stale || b.stale) dashed += seg; else solid += seg;
+    }
+    const base = { fill: "none", stroke: SITE_COLOR[site], "stroke-width": 2,
+                   opacity: site === st.active_site ? 1 : .75 };
+    if (solid) el("path", { ...base, d: solid }, chart);
+    if (dashed) el("path", { ...base, d: dashed, "stroke-dasharray": "4 3",
+                             opacity: 0.45, class: "stale-series" }, chart);
+    // A lone stale sample with no drawable neighbour still needs a mark.
+    pts.forEach((pt, i) => {
+      if (!pt || !pt.stale) return;
+      const lonely = (!pts[i - 1] || !pts[i + 1]);
+      if (lonely || pts.length < 3)
+        el("circle", { cx: pt.x, cy: pt.y, r: 2.5, fill: "var(--warning)",
+                       class: "stale-point" }, chart);
+    });
+  }
+  // Per-tick data-quality ribbon under the axis. Line styling alone can
+  // lose a one-tick episode to sub-pixel width; a dedicated strip cannot.
+  const ribbonY = H - P.b + 6;
+  let anyStale = false, anyMissing = false;
+  for (let i = 0; i < hist.length; i++) {
+    const h = hist[i];
+    const managed = SITE_ORDER.filter(s => s in st.sites);
+    const missing = managed.filter(s => !h.intensities || h.intensities[s] == null);
+    const stale = (h.stale || []);
+    if (!missing.length && !stale.length) continue;
+    const x0 = X(h.sim_t);
+    const x1 = i + 1 < hist.length ? X(hist[i + 1].sim_t) : x0 + 1.5;
+    const w = Math.max(1.5, x1 - x0);
+    anyStale = anyStale || stale.length > 0;
+    anyMissing = anyMissing || missing.length > 0;
+    el("rect", { x: x0, y: ribbonY, width: w, height: 4,
+      fill: missing.length ? "#d03b3b" : "var(--warning)",
+      opacity: 0.85,
+      class: missing.length ? "quality-missing" : "quality-stale" }, chart);
+  }
+  if (anyStale || anyMissing) {
+    el("text", { x: P.l, y: ribbonY + 15, fill: "var(--warning)",
+      "font-size": 10 }, chart,
+      "data quality: " + [anyStale ? "amber = stale" : null,
+                          anyMissing ? "red = no reading" : null]
+        .filter(Boolean).join(" · "));
+  }
+
+  // direct-label the active series only (selective)
+  const last = hist[hist.length - 1];
+  const lastVal = last.intensities ? last.intensities[st.active_site] : undefined;
+  if (lastVal !== undefined && lastVal !== null) {
+    el("text", { x: W - P.r - 4, y: Y(lastVal) - 6,
+      "text-anchor": "end", fill: "var(--ink)", "font-size": 12,
+      "font-weight": 650 }, chart, "▶ " + st.active_site);
+  }
+  chart._X = X; chart._range = [t0, t1]; chart._pad = P; chart._W = W; chart._H = H;
+}
+
+wrap.addEventListener("mousemove", ev => {
+  if (!lastHistory.length || !chart._X) return;
+  const r = chart.getBoundingClientRect();
+  const px = (ev.clientX - r.left) / r.width * chart._W;
+  const [t0, t1] = chart._range;
+  const frac = Math.min(1, Math.max(0, (px - chart._pad.l) / (chart._W - chart._pad.l - chart._pad.r)));
+  const h = lastHistory[Math.round(frac * (lastHistory.length - 1))];
+  if (!h) return;
+  const known = SITE_ORDER.filter(s => h.intensities && h.intensities[s] != null);
+  const missing = SITE_ORDER.filter(s => !h.intensities || h.intensities[s] == null);
+  const rows = known.sort((a, b) => h.intensities[a] - h.intensities[b])
+    .map(s => `<div class="row"><span style="display:flex;align-items:center;gap:6px">
+       <span class="chip" style="background:${SITE_COLOR[s]}"></span>${s}${s===h.active?" ▶":""}</span>
+       <span class="val">${Math.round(h.intensities[s])}${
+         (h.stale || []).includes(s)
+           ? '<span style="color:var(--warning)">*</span>' : ""}</span></div>`).join("")
+    + missing.map(s => `<div class="row"><span style="display:flex;align-items:center;gap:6px">
+       <span class="chip" style="background:${SITE_COLOR[s]};opacity:.35"></span>${s}</span>
+       <span class="val" style="color:var(--warning)">—</span></div>`).join("");
+  tooltip.innerHTML = `<div style="color:var(--muted);margin-bottom:4px">${fmtT(h.hour)}</div>${rows}`;
+  tooltip.style.display = "block";
+  const tx = Math.min(ev.clientX - r.left + 14, r.width - 170);
+  tooltip.style.left = tx + "px";
+  tooltip.style.top = Math.min(ev.clientY - r.top + 10, r.height - 140) + "px";
+});
+wrap.addEventListener("mouseleave", () => tooltip.style.display = "none");
+
+// ---- legend ----
+document.getElementById("legend").innerHTML = SITE_ORDER.map(s =>
+  `<span class="item"><span class="chip" style="background:${SITE_COLOR[s]}"></span>${s}</span>`).join("");
+
+// ---- sparklines ----
+function spark(id, values, color) {
+  const svg = document.getElementById(id);
+  svg.replaceChildren();
+  if (values.length < 2) return;
+  const W = svg.clientWidth || 200, H = 34;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const min = Math.min(...values), max = Math.max(...values);
+  const Y = v => max === min ? H/2 : H - 3 - (v - min) / (max - min) * (H - 6);
+  const d = values.map((v, i) =>
+    `${i ? "L" : "M"}${(i/(values.length-1)*W).toFixed(1)} ${Y(v).toFixed(1)}`).join("");
+  el("path", { d, fill: "none", stroke: color, "stroke-width": 2 }, svg);
+}
+
+// ---- site table ----
+function drawTable(st) {
+  const tb = document.querySelector("#sitetable tbody");
+  tb.replaceChildren();
+  for (const name of SITE_ORDER) {
+    const s = st.sites[name];
+    if (!s) continue;
+    const tr = document.createElement("tr");
+    if (name === st.active_site) tr.className = "active";
+    const est = (st.net_estimates || {})[name];
+    const path = name === st.active_site ? "—"
+      : est && est.ok
+        ? `<span title="${est.path.join(" → ")}">${est.hops} hop${est.hops>1?"s":""} · ${est.headroom_gbps} Gbps free</span>`
+        : `<span style="color:var(--muted)">no data</span>`;
+    tr.innerHTML =
+      `<td><span class="chip" style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${SITE_COLOR[name]}"></span></td>
+       <td>${name === st.active_site ? "▶ " : ""}${s.display}</td>
+       <td>${s.zone}</td>
+       <td class="num" style="text-align:right">${
+         s.intensity === null || s.intensity === undefined
+           ? `<span style="color:var(--warning)" title="no reading">—</span>`
+           : s.data === "stale"
+             ? `<span style="color:var(--warning)" title="last known value, not measured this tick">${Math.round(s.intensity)}*</span>`
+             : Math.round(s.intensity)}</td>
+       <td style="font-size:12px">${path}</td>
+       <td><button data-move="${name}" ${(!s.managed || name === st.active_site || st.status !== "running") ? "disabled" : ""}
+            title="Force the job to migrate here">▶ move job</button></td>`;
+    tb.appendChild(tr);
+  }
+}
+document.addEventListener("click", ev => {
+  const b = ev.target.closest("button");
+  if (!b) return;
+  if (b.dataset.move) post("/api/migrate", { site: b.dataset.move });
+});
+const post = (url, body) => fetch(url, { method: "POST",
+  headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+// ---- main poll loop ----
+async function tick() {
+  try {
+    const st = await (await fetch("/api/state")).json();
+    // Never claim "running" when the engine reports the job is not.
+    const badge = document.getElementById("status");
+    if (st.health === "down") {
+      badge.textContent = `JOB DOWN @ ${st.active_site}`;
+      badge.className = "badge down";
+    } else if (st.status === "migrating") {
+      badge.textContent = "MIGRATING…";
+      badge.className = "badge migrating";
+    } else if (st.status === "completed") {
+      badge.textContent = `COMPLETED @ ${st.active_site}`;
+      badge.className = "badge";
+      badge.style.color = "var(--good)";
+      badge.style.borderColor = "var(--good)";
+    } else if (st.health === "stalled") {
+      badge.textContent = `STALLED @ ${st.active_site}`;
+      badge.className = "badge stalled";
+    } else {
+      badge.textContent = `running @ ${st.active_site}`;
+      badge.className = "badge";
+      badge.style.color = "";
+      badge.style.borderColor = "";
+    }
+    const hb = document.getElementById("healthbar");
+    hb.style.display = st.health_note ? "block" : "none";
+    hb.className = st.health === "down" ? "down" : "";
+    hb.textContent = st.health_note || "";
+    const lastMig = st.migrations[st.migrations.length - 1];
+    const parts = [];
+    if (st.measured_rate_gbps) parts.push(`${st.measured_rate_gbps} Gbps`);
+    if (st.measured_setup_s) parts.push(`setup ${st.measured_setup_s}s`);
+    if (st.measured_orchestration_s)
+      parts.push(`stop/start ${st.measured_orchestration_s}s`);
+    const calib = parts.length ? ` · measured ${parts.join(" · ")}` : "";
+    const lastM = lastMig && lastMig.predicted_downtime_s != null
+      ? ` · last move ${lastMig.downtime_s}s vs ${lastMig.predicted_downtime_s}s predicted`
+        + (lastMig.transfer_method && lastMig.transfer_method !== "dataplane"
+           ? ` (${lastMig.transfer_method})` : "")
+      : "";
+    document.getElementById("clock").textContent =
+      `sim ${fmtT(st.sim_hour)} · ${st.accel}× · ${st.migrations.length} migrations${calib}${lastM}`;
+
+    document.getElementById("saved").textContent = fmtG(st.saved_g) + " CO₂";
+    document.getElementById("saved-note").textContent =
+      `chasing ${fmtG(st.emissions_g)} vs staying ${fmtG(st.baseline_g)}`;
+    // Never let the number imply measurement the data doesn't support.
+    const cs = st.carbon_source || {};
+    const el = document.getElementById("carbon-source");
+    const labels = {simulated: "⚠ simulated carbon data",
+                    "trace-replay": "▶ replayed measured history",
+                    "trace-replay-unverified": "⚠ trace of unverified origin",
+                    live: "● live grid data"};
+    let text = (labels[cs.kind] || cs.kind || "")
+      + (cs.injected_events ? ` · ${cs.injected_events} injected event(s)` : "");
+    let warn = cs.kind !== "live" && cs.kind !== "trace-replay"
+      || !!cs.injected_events;
+
+    // A frozen counter with no explanation reads as "nothing is happening"
+    // rather than "we stopped counting because the data went away".
+    if (st.carbon_status === "unavailable") {
+      text = "⛔ carbon feed unavailable — counter paused";
+      warn = true;
+    } else if (st.carbon_status === "stale") {
+      text = "⚠ carbon data stale — counter paused";
+      warn = true;
+    }
+    el.textContent = text;
+    el.style.color = warn ? "var(--warning)" : "var(--muted)";
+    el.title = st.carbon_note || cs.detail || "";
+    // Power is the other factor in the number above it; show its provenance
+    // with the same prominence.
+    const ps = st.power_source || {};
+    const pel = document.getElementById("power-source");
+    pel.textContent = ps.measured ? "● measured GPU power (NVML)"
+                                  : "⛔ power unavailable — counter paused";
+    pel.style.color = ps.measured ? "var(--muted)" : "var(--warning)";
+    pel.title = ps.detail || "";
+    // Grey the headline number out while it cannot advance.
+    document.getElementById("saved").style.opacity =
+      st.carbon_status === "ok" ? "1" : "0.45";
+    if (st.progress) {
+      document.getElementById("steps").textContent =
+        st.progress.step.toLocaleString() + " steps";
+      document.getElementById("train-note").textContent =
+        `loss ${st.progress.loss} · acc ${(st.progress.acc*100).toFixed(1)}% · never lost a step`;
+    }
+    spark("spark-saved", st.history.map(h => h.saved_g), "var(--good)");
+    spark("spark-loss", st.history.filter(h => h.loss != null).map(h => h.loss), "var(--muted)");
+
+    drawMap(st); drawMigrationArc(st); drawChart(st); drawTable(st);
+    document.getElementById("netnote").textContent = st.net_note || "";
+  } catch (e) {
+    document.getElementById("status").textContent = "backend unreachable";
+  }
+  setTimeout(tick, 1500);
+}
+tick();
+</script>
+</body>
+</html>

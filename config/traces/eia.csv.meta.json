@@ -1,0 +1,14 @@
+{
+  "source": "EIA hourly fuel mix x published emission factors",
+  "measured": true,
+  "fetched_at": "2026-09-03T00:17:14.796994+00:00",
+  "zones": [
+    "US-CAL-CISO",
+    "US-CAR-DUK",
+    "US-MIDA-PJM",
+    "US-NW-PACE",
+    "US-NY-NYIS",
+    "US-TEX-ERCO"
+  ],
+  "note": "intensity DERIVED from measured generation mix, not a measured CO2 value"
+}

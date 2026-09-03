@@ -1,0 +1,3 @@
+# Extra deps for --mode fabric (heavy; sim mode doesn't need them)
+fabrictestbed-extensions>=1.7
+nvidia-ml-py>=12.0

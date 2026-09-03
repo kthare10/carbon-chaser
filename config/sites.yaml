@@ -1,0 +1,92 @@
+# FABRIC sites participating in the carbon-chase, with their grid zones.
+# `zone` is an Electricity Maps zone id (used by the live provider and to
+# pick a curve shape in the simulator).
+#
+# The workload starts at `start_site`. In fabric mode, only sites listed in
+# `fabric.sites` get a VM; the rest still show on the map (grey).
+
+start_site: CLEM
+
+sites:
+  CLEM:
+    display: "CLEM (Clemson, SC)"
+    lat: 34.6834
+    lon: -82.8374
+    zone: US-CAR-DUK
+  TACC:
+    display: "TACC (Austin, TX)"
+    lat: 30.3900
+    lon: -97.7300
+    zone: US-TEX-ERCO
+  UTAH:
+    display: "UTAH (Salt Lake City, UT)"
+    lat: 40.7700
+    lon: -111.8400
+    zone: US-NW-PACE
+  STAR:
+    display: "STAR (Chicago, IL)"
+    lat: 41.9000
+    lon: -87.6200
+    zone: US-MIDA-PJM
+  UCSD:
+    display: "UCSD (San Diego, CA)"
+    lat: 32.8800
+    lon: -117.2300
+    zone: US-CAL-CISO
+  NEWY:
+    display: "NEWY (New York, NY)"
+    lat: 40.7200
+    lon: -74.0000
+    zone: US-NY-NYIS
+
+# Orchestration policy
+policy:
+  poll_interval_s: 2          # real seconds between decision ticks
+  min_dwell_min: 15           # sim-minutes to stay put after a migration
+  improvement_g: 60           # migrate only if best site beats current by this many gCO2/kWh
+  stall_after_s: 90           # no training progress for this long => flag it
+                              # and attempt a restart (real seconds)
+  # Power is always measured from NVML; there is no assumed-power mode.
+  power_max_age_s: 120        # a power sample older than this is not used
+
+# Live FABRIC dataplane telemetry (public-metrics.fabric-testbed.net) —
+# prices the checkpoint transfer before migrating and vetoes moves whose
+# predicted downtime exceeds the budget. Fail-open: no data => carbon-only.
+network:
+  enabled: true
+  overhead_s: 20              # fixed stop+resume cost added to transfer time
+  max_downtime_s: 120         # veto migration if predicted downtime exceeds this
+  transfer_timeout_s: 300     # hard ceiling on a checkpoint transfer; a
+                              # dataplane transfer that blows it is abandoned
+                              # and the relay fallback runs instead
+  default_checkpoint_mb: 1    # used until a real checkpoint size is known
+
+# Carbon-intensity source. Precedence: trace_file (measured history
+# replayed at sim speed) > EMAPS_TOKEN live feed > simulator.
+# Populate a trace with:  python fabric/fetch_traces.py --source eia --days 7
+carbon:
+  trace_file: config/traces/eia.csv   # REAL: EIA hourly fuel mix x emission factors
+  trace_loop: true          # repeat the trace so a booth run never runs dry
+
+# Trace replay speed. This is a CLOCK setting, not a data source: the values
+# replayed are measured, only the pace is compressed.
+replay:
+  accel: 300                  # sim-seconds per real second
+  start_hour: 6.0
+
+# Fabric-mode settings
+fabric:
+  slice_name: carbon-chaser
+  sites: [CLEM, TACC, UTAH]   # sites that get a VM (production sites only)
+  image: default_ubuntu_22
+  cores: 4                    # must fit on the GPU's own host, not just the
+  ram: 16                     # site total — 8 cores failed to place at CLEM
+  disk: 60                    # room for CUDA + torch (~15 GB)
+  # GPUs are required: measured NVML power is the whole point. Model per
+  # site, since FABRIC's inventory is heterogeneous (checked 2026-08-26).
+  gpus:
+    CLEM: GPU_RTX6000
+    TACC: GPU_TeslaT4
+    UTAH: GPU_TeslaT4
+  workload: train_gpu.py
+  checkpoint_file: checkpoint.pt

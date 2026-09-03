@@ -1,0 +1,34 @@
+Bootstrap: docker
+From: pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
+
+# The complete tool stack for every workflow job (train/evaluate/predict/
+# report). Jobs run inside this image via PegasusLite + Apptainer, so the
+# workers need NO python packages at all — only HTCondor, Apptainer and the
+# NVIDIA driver. That closes the failure class hit on a live pool where a
+# worker's system python was missing numpy and every training segment died
+# three seconds in, after planning, submission and a 1 GB stage-in.
+#
+# Built ONCE on the submit node by stage_submit_node.py:
+#     sudo apptainer build higgs_container.sif Apptainer/higgs_container.def
+# and registered in the workflow as a file:// container on site `local`, so
+# HTCondor ships it into each job sandbox like any other input. Deliberately
+# NOT docker:// at run time: an unauthenticated Docker Hub pull per job is a
+# rate-limit away from killing a demo.
+#
+# GPU jobs get `--nv` (set on the Container in workflow_generator.py), which
+# binds the HOST driver into the container — so the CUDA runtime here must
+# stay compatible with the driver install_gpu_stack.py picks, and pynvml
+# reads the real board sensor from inside.
+
+%post
+    pip install --no-cache-dir numpy pandas nvidia-ml-py
+
+%environment
+    export PYTHONUNBUFFERED=1
+
+%labels
+    maintainer carbon-chaser
+    purpose HIGGS carbon-aware workflow tool stack
+
+%test
+    python3 -c "import torch, numpy, pandas, pynvml; print('stack ok')"

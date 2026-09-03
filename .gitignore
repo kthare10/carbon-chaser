@@ -1,0 +1,8 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+runs/
+*.npz
+.DS_Store
+.idea/

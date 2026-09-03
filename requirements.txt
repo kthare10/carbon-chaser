@@ -1,0 +1,5 @@
+fastapi>=0.110
+uvicorn>=0.29
+numpy>=1.26
+pyyaml>=6.0
+requests>=2.31
