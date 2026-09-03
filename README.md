@@ -171,8 +171,28 @@ old (with `UPDATE_INTERVAL = 60`; it was 208–268 s at the default), while at
 `CARBON_ACCEL = 300` a single trace row lasts 12 s. So the defensible claim
 for the workflow is "the site advertising the lowest carbon intensity", not
 "the cleanest site at this instant". `check_pool_match.py` measures and warns
-about the gap; lowering the acceleration to ~30–60× closes it, at the cost of
-fewer migrations per run.
+about the gap.
+
+Do the arithmetic before picking an acceleration. One hourly trace row lasts
+`3600/ACCEL` real seconds, so an ad `S` seconds old is `S × ACCEL / 3600`
+**replayed hours** behind:
+
+| `CARBON_ACCEL` | a trace row lasts | ad lag at S = 140–200 s | inside one row? |
+|---|---|---|---|
+| 300× | 12 s | 11.7–16.7 h | no |
+| 60× | 60 s | 2.3–3.3 h | no |
+| 30× | 120 s | 1.2–1.7 h | no |
+| 20× | 180 s | 0.8–1.1 h | borderline |
+| 12× | 300 s | 0.5–0.7 h | yes |
+
+So dropping to 30–60× shrinks the lag by roughly 5–10× but does **not**
+eliminate it — the advertised value is still at least a full trace row
+behind, and CISO alone swings 147 → 287 g between midday and evening, so a
+two-hour-stale ranking can still be the wrong ranking. Keeping the ad inside
+a single row needs `ACCEL < 3600/S`, i.e. **under ~20×** at the staleness we
+measure. That buys a literally-true "cleanest site" at the price of a booth
+slot that may show no organic migration at all, which is why the demo states
+what it advertises instead of claiming more.
 
 ### Measured power (GPUs are mandatory)
 
