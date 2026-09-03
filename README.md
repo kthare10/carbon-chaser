@@ -188,11 +188,24 @@ Do the arithmetic before picking an acceleration. One hourly trace row lasts
 So dropping to 30–60× shrinks the lag by roughly 5–10× but does **not**
 eliminate it — the advertised value is still at least a full trace row
 behind, and CISO alone swings 147 → 287 g between midday and evening, so a
-two-hour-stale ranking can still be the wrong ranking. Keeping the ad inside
-a single row needs `ACCEL < 3600/S`, i.e. **under ~20×** at the staleness we
-measure. That buys a literally-true "cleanest site" at the price of a booth
-slot that may show no organic migration at all, which is why the demo states
-what it advertises instead of claiming more.
+two-hour-stale ranking can still be the wrong ranking. Bounding the lag to
+about one row needs `ACCEL < 3600/S`, i.e. under ~20× at the staleness we
+measure.
+
+**Even then the claim stays "advertised", and no acceleration changes that.**
+Two things stop a lower `ACCEL` from buying "the cleanest site at this
+instant". An ad younger than one row can still be the *previous* row's — the
+bound is on age, not on which row it came from. More fundamentally,
+matchmaking ranks the collector's copies of ads that each worker sampled on
+its own unsynchronised 60 s `STARTD_CRON`, so the values being compared are
+up to `60 × ACCEL` seconds of replayed time apart — 5 h at 300×, and still
+20 min at 20×. There is no single-instant snapshot to rank: each node's
+position is only required to match *its own* `CarbonSampledAt`, which is
+exactly what `replay_coherence()` in the dashboard and `check_pool_match.py`
+verify. Lowering the acceleration narrows the error; it does not turn "lowest
+advertised" into "lowest". That is why the dashboard, the report and the
+abstract all say **advertised** — and why the remaining choice is a booth
+trade-off (livelier migrations vs tighter prices), not a correctness fix.
 
 ### Measured power (GPUs are mandatory)
 
