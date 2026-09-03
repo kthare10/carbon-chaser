@@ -23,6 +23,7 @@ import argparse
 import html
 import json
 import os
+import re
 import sys
 
 # One stable color per host, assigned in order of first appearance.
@@ -334,9 +335,31 @@ def glossary(result):
          "Where the final evaluation ran. <code>cuda</code> means a real "
          "GPU scored the model, not a CPU fallback."),
     ]
+    # The citation belongs in the report body, not only inside the collapsed
+    # raw json: this page is the science deliverable, and the AUC above is
+    # only meaningful next to the published number it is being compared to.
+    for field, gloss in (
+        ("dataset", "What was trained on. The benchmark is public, so the "
+                    "numbers above are comparable to published work rather "
+                    "than to this project alone."),
+        ("reference", "The published result this run is measured against. "
+                      "Follow the DOI rather than the article number — "
+                      "Nature Communications article 4308 carries doi "
+                      "<code>ncomms5308</code>, and "
+                      "<code>ncomms4308</code> is an unrelated paper."),
+    ):
+        if result.get(field):
+            rows.append((field, str(result[field]), gloss))
+
+    def cell(v):
+        """Link bare DOIs so the citation is one click from the report."""
+        out = html.escape(v)
+        return re.sub(r"(?:doi:)?(10\.\d{4,9}/[^\s,)]+)",
+                      r'<a href="https://doi.org/\1">doi:\1</a>', out)
+
     body = "".join(
         f"<tr><td><code>{html.escape(k)}</code></td>"
-        f"<td><b>{html.escape(v)}</b></td><td>{d}</td></tr>"
+        f"<td><b>{cell(v)}</b></td><td>{d}</td></tr>"
         for k, v, d in rows)
     return ('<table class="gloss"><tr><th>field</th><th>value</th>'
             f'<th>what it means</th></tr>{body}</table>')
