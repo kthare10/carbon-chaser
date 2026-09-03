@@ -239,6 +239,72 @@ refuses to calibrate on anything but a `dataplane` transfer. In sim mode
 transfers are local file copies, so `measured_rate_gbps` stays null by
 design.
 
+## Carbon feed handling — the engine and its dashboard
+
+Every symbol named below lives in `carbon_chaser/` — `carbon.py`,
+`engine.py`, and the FastAPI dashboard in `carbon_chaser/static/` — so
+these are post-mortems on the **legacy** implementation. The rules they
+established are shared with the current demo; see
+[README.md](README.md#data-provenance--what-is-measured-vs-modeled).
+
+**The source is planned before the clock is built.** `plan_carbon_source()`
+decides trace/live/simulated first, then the clock follows that decision —
+1× only for a live feed, accelerated otherwise. Choosing the clock from the
+presence of `EMAPS_TOKEN` while the provider preferred a trace replayed
+measured history at 1× and silently discarded `--accel`.
+
+**A trace must cover every configured zone.** Coverage is validated up
+front, because `fetch_traces.py` skips zones that error out and a partial
+trace is therefore easy to produce. Left to run, the missing zone raised on
+every tick and blanked *all* readings — zero history, zero intensities, and
+the engine still reporting `status: running, health: ok`. A rejected trace
+falls back with the missing zones named, and the fallback provider states
+that real data was requested and unavailable, so a failed measurement never
+reads as a deliberate simulation. Per-zone reads with last-known fallback
+keep one bad zone from taking down the rest of the map.
+
+**Being drawn differently is not the same as being visible.** Styling stale
+runs as dashed lines still hid short episodes: one stale tick produced an SVG
+path of a single `moveto`, which draws nothing at all, so the classic
+intermittent-timeout pattern was completely invisible while the solid line's
+sub-pixel gaps read as continuous. The chart therefore classifies **edges**
+(an edge is measured only if both endpoints were), so a lone stale sample
+draws dashed segments to its neighbours — and a per-tick **data-quality
+ribbon** under the axis (amber = stale, red = no reading) stays visible
+regardless of episode length or chart width. `tests/test_dashboard_render.py`
+asserts this against the real DOM, because invisibility is invisible to
+state-level tests.
+
+**Stale is a third state, not a flavour of fresh.** A stale reading still
+has a number, so any test of the form "does it have a value?" treats it as a
+measurement. Each site reports `data`: `fresh` / `stale` / `missing`, each
+history point records which samples were carried over, and the UI draws all
+three differently — a dashed faded marker labelled `556 g · stale`, an
+asterisked amber table value, and chart series split into solid (measured)
+and dashed-faded (carried over) paths so a stale plateau cannot read as a
+flat measurement.
+
+**Unknown is `null`, never `0`.** Zero is a legitimate reading — a fully
+renewable grid — so it must never double as "no data". Reporting a missing
+reading as 0 made an outage paint every site as the *cleanest possible*
+grid, since the colour ramp maps 0 to its lightest step. Each site now
+carries `intensity` (nullable) plus `data`: `fresh` / `stale` / `missing`,
+and the UI renders unknown as unknown: a hollow dashed marker labelled "no
+data", `—` in the table, chart lines that **break** across gaps rather than
+interpolating through them or spiking to the floor, and `—` in the tooltip.
+
+**A dead feed is stated, not absorbed.** Carbon-feed condition
+(`carbon_status`: ok / stale / unavailable) is tracked separately from job
+health, because they answer different questions and one kept clobbering the
+other — advancing training steps prove the *job* is alive and say nothing
+about the feed, so the liveness check was silently clearing outage
+verdicts. Only **fresh** readings may move the emissions counters or justify
+a migration: a stale value may still be *displayed* briefly (bounded by
+`policy.carbon_max_stale_s`), but counting it would invent CO₂ that was
+never measured. Past the bound the reading is withdrawn rather than shown
+indefinitely as current, and the dashboard greys the headline number and
+says why it is paused.
+
 ## Quickstart — local trace replay (no FABRIC needed)
 
 ```bash

@@ -146,72 +146,33 @@ zone list: all exist and are Tier A (Duke Energy Carolinas, ERCOT,
 PacifiCorp East, PJM, CAISO, NYISO). A wrong zone id otherwise yields a
 silently empty feed.
 
-**The source is planned before the clock is built.** `plan_carbon_source()`
-decides trace/live/simulated first, then the clock follows that decision —
-1× only for a live feed, accelerated otherwise. Choosing the clock from the
-presence of `EMAPS_TOKEN` while the provider preferred a trace replayed
-measured history at 1× and silently discarded `--accel`.
-
-**A trace must cover every configured zone.** Coverage is validated up
-front, because `fetch_traces.py` skips zones that error out and a partial
-trace is therefore easy to produce. Left to run, the missing zone raised on
-every tick and blanked *all* readings — zero history, zero intensities, and
-the engine still reporting `status: running, health: ok`. A rejected trace
-falls back with the missing zones named, and the fallback provider states
-that real data was requested and unavailable, so a failed measurement never
-reads as a deliberate simulation. Per-zone reads with last-known fallback
-keep one bad zone from taking down the rest of the map.
-
-**Being drawn differently is not the same as being visible.** Styling stale
-runs as dashed lines still hid short episodes: one stale tick produced an SVG
-path of a single `moveto`, which draws nothing at all, so the classic
-intermittent-timeout pattern was completely invisible while the solid line's
-sub-pixel gaps read as continuous. The chart therefore classifies **edges**
-(an edge is measured only if both endpoints were), so a lone stale sample
-draws dashed segments to its neighbours — and a per-tick **data-quality
-ribbon** under the axis (amber = stale, red = no reading) stays visible
-regardless of episode length or chart width. `tests/test_dashboard_render.py`
-asserts this against the real DOM, because invisibility is invisible to
-state-level tests.
-
-**Stale is a third state, not a flavour of fresh.** A stale reading still
-has a number, so any test of the form "does it have a value?" treats it as a
-measurement. Each site reports `data`: `fresh` / `stale` / `missing`, each
-history point records which samples were carried over, and the UI draws all
-three differently — a dashed faded marker labelled `556 g · stale`, an
-asterisked amber table value, and chart series split into solid (measured)
-and dashed-faded (carried over) paths so a stale plateau cannot read as a
-flat measurement.
-
-**Unknown is `null`, never `0`.** Zero is a legitimate reading — a fully
-renewable grid — so it must never double as "no data". Reporting a missing
-reading as 0 made an outage paint every site as the *cleanest possible*
-grid, since the colour ramp maps 0 to its lightest step. Each site now
-carries `intensity` (nullable) plus `data`: `fresh` / `stale` / `missing`,
-and the UI renders unknown as unknown: a hollow dashed marker labelled "no
-data", `—` in the table, chart lines that **break** across gaps rather than
-interpolating through them or spiking to the floor, and `—` in the tooltip.
-
-**A dead feed is stated, not absorbed.** Carbon-feed condition
-(`carbon_status`: ok / stale / unavailable) is tracked separately from job
-health, because they answer different questions and one kept clobbering the
-other — advancing training steps prove the *job* is alive and say nothing
-about the feed, so the liveness check was silently clearing outage
-verdicts. Only **fresh** readings may move the emissions counters or justify
-a migration: a stale value may still be *displayed* briefly (bounded by
-`policy.carbon_max_stale_s`), but counting it would invent CO₂ that was
-never measured. Past the bound the reading is withdrawn rather than shown
-indefinitely as current, and the dashboard greys the headline number and
-says why it is paused.
-
 **Provenance travels with the data.** `fetch_traces.py` writes a
-`<trace>.meta.json` sidecar recording the source, whether it is measured,
-and any caveats (EIA intensity is *derived* — measured generation mix ×
-published emission factors — not a measured CO₂ value). A trace with no
-sidecar, or one marked `measured: false`, is reported as
-`trace-replay-unverified` and the dashboard flags it in amber. The repo
-ships `config/traces/placeholder.csv`, which is **synthetic** and labelled
-as such — it exists so the replay path is exercised, not to be quoted.
+`<trace>.meta.json` sidecar recording the source, whether it is measured, and
+any caveats (EIA intensity is *derived* — measured generation mix × published
+emission factors — not a measured CO₂ value). Ship the sidecar with the trace:
+a trace whose provenance is unknown should be reported as unverified, not
+quoted as measurement.
+
+Two rules the accounting follows in **both** implementations: **unknown is
+`null`, never `0`** (zero is a legitimate reading — a fully renewable grid —
+so it must never double as "no data"), and **stale is a third state, not a
+flavour of fresh**. Both came from real bugs; the post-mortems, with the
+measured evidence against the legacy engine and dashboard that produced them,
+are in
+[README-legacy.md](README-legacy.md#carbon-feed-handling--the-engine-and-its-dashboard).
+
+**Where the two differ — and the current demo's honest caveat.** The legacy
+engine refuses to let a stale reading move the emissions counters at all
+(`policy.carbon_max_stale_s`). The workflow instead prices each segment with
+the intensity **recorded in its own job ad at match time**, which is
+auditable afterwards from `condor_history` alone but does lag the trace: the
+negotiator ranks the *collector's* copy of a machine ad, measured 140–200 s
+old (with `UPDATE_INTERVAL = 60`; it was 208–268 s at the default), while at
+`CARBON_ACCEL = 300` a single trace row lasts 12 s. So the defensible claim
+for the workflow is "the site advertising the lowest carbon intensity", not
+"the cleanest site at this instant". `check_pool_match.py` measures and warns
+about the gap; lowering the acceleration to ~30–60× closes it, at the cost of
+fewer migrations per run.
 
 ### Measured power (GPUs are mandatory)
 
